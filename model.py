@@ -20,7 +20,7 @@ except Exception as import_error:  # pragma: no cover - exercised only when deps
     Dense = Embedding = LSTM = Sequential = load_model = pad_sequences = Tokenizer = None  # type: ignore[assignment]
     _ML_IMPORT_ERROR = import_error
 
-from nlp_utils import preprocess_as_string
+from nlp_utils import preprocess_as_string, preprocess_text
 
 BASE_DIR = Path(__file__).resolve().parent
 INTENTS_PATH = BASE_DIR / "intents.json"
@@ -61,6 +61,46 @@ def _build_training_corpus(intents: dict) -> Tuple[List[str], List[str]]:
                 texts.append(processed)
                 labels.append(tag)
     return texts, labels
+
+
+def _score_pattern_match(message_tokens: List[str], pattern_tokens: List[str]) -> float:
+    """Score overlap between a message and a training pattern."""
+
+    if not message_tokens or not pattern_tokens:
+        return 0.0
+
+    message_token_set = set(message_tokens)
+    pattern_token_set = set(pattern_tokens)
+    overlap = len(message_token_set & pattern_token_set)
+    return overlap / max(len(pattern_token_set), 1)
+
+
+def _heuristic_predict_intent(message: str) -> Tuple[str, float]:
+    """Predict an intent without TensorFlow by matching against training patterns."""
+
+    intents = load_intents()
+    message_tokens = preprocess_text(message)
+    if not message_tokens:
+        return "fallback", 0.0
+
+    best_intent = "fallback"
+    best_score = 0.0
+
+    for intent in intents.get("intents", []):
+        tag = intent.get("tag", "fallback")
+        if tag == "fallback":
+            continue
+
+        for pattern in intent.get("patterns", []):
+            pattern_tokens = preprocess_text(pattern)
+            score = _score_pattern_match(message_tokens, pattern_tokens)
+            if score > best_score:
+                best_score = score
+                best_intent = tag
+
+    if best_score < 0.25:
+        return "fallback", best_score
+    return best_intent, best_score
 
 
 def _encode_labels(labels: List[str]) -> Tuple[np.ndarray, Dict[str, int], Dict[int, str]]:
@@ -174,7 +214,9 @@ def _ensure_artifacts_loaded() -> None:
 def predict_intent(message: str, threshold: float = 0.7) -> Tuple[str, float]:
     """Predict the most likely intent and confidence for a message."""
 
-    _require_ml_stack()
+    if _ML_IMPORT_ERROR is not None:
+        return _heuristic_predict_intent(message)
+
     _ensure_artifacts_loaded()
     assert _MODEL is not None
     assert _TOKENIZER is not None
