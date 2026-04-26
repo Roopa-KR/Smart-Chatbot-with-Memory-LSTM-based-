@@ -8,7 +8,7 @@ from typing import Optional
 
 from db import get_recent_messages, initialize_database, log_conversation, retrieve_memory, store_memory
 from model import get_random_response, is_model_ready, predict_intent
-from utils import extract_name, is_name_query
+from utils import extract_name, extract_preference, is_name_query, is_preference_query
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,11 +27,22 @@ def generate_chat_response(user_id: str, message: str) -> str:
         store_memory(user_id, "name", extracted_name)
         return f"Nice to meet you, {extracted_name}!"
 
+    extracted_preference = extract_preference(message)
+    if extracted_preference:
+        store_memory(user_id, "likes", extracted_preference)
+        return f"Got it. I'll remember that you like {extracted_preference}."
+
     if is_name_query(message):
         stored_name = retrieve_memory(user_id, "name")
         if stored_name:
             return f"Your name is {stored_name}."
         return "I do not know your name yet. Tell me by saying 'My name is ...'."
+
+    if is_preference_query(message):
+        stored_preference = retrieve_memory(user_id, "likes")
+        if stored_preference:
+            return f"You like {stored_preference}."
+        return "I do not know what you like yet. Tell me by saying 'I like ...'."
 
     intent, confidence = predict_intent(message, threshold=0.7)
     logger.info("Predicted intent for %s: %s (%.3f)", user_id, intent, confidence)
@@ -67,7 +78,7 @@ def run_interactive_chat(user_id: str) -> None:
 
     _print_header(user_id)
     if not is_model_ready():
-        print("Warning: TensorFlow model is not ready. Memory and regex replies will still work.")
+        print("Warning: TensorFlow model is not ready. Using heuristic intent fallback in terminal mode.")
 
     while True:
         try:
