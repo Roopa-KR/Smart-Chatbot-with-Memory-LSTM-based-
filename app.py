@@ -1,11 +1,10 @@
-"""Flask application exposing the chatbot API."""
+"""Terminal-based chatbot application."""
 
 from __future__ import annotations
 
+import argparse
 import logging
-import os
-
-from flask import Flask, jsonify, request
+from typing import Optional
 
 from db import get_recent_messages, initialize_database, log_conversation, retrieve_memory, store_memory
 from model import get_random_response, is_model_ready, predict_intent
@@ -14,12 +13,7 @@ from utils import extract_name, is_name_query
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
 initialize_database()
-
-
-def _json_error(message: str, status_code: int = 400):
-    return jsonify({"error": message}), status_code
 
 
 def generate_chat_response(user_id: str, message: str) -> str:
@@ -48,35 +42,71 @@ def generate_chat_response(user_id: str, message: str) -> str:
     return get_random_response(intent)
 
 
-@app.route("/chat", methods=["POST"])
-def chat():
-    payload = request.get_json(silent=True) or {}
-    user_id = str(payload.get("user_id", "")).strip()
-    message = str(payload.get("message", "")).strip()
+def _print_header(user_id: str) -> None:
+    print("Smart Chatbot with Memory")
+    print(f"User ID: {user_id}")
+    print("Type 'quit' or 'exit' to stop.\n")
+
+
+def chat_once(user_id: str, message: str) -> str:
+    """Process one chat turn and persist the exchange."""
 
     if not user_id:
-        return _json_error("'user_id' is required.")
+        raise ValueError("user_id is required")
     if not message:
-        return _json_error("'message' is required.")
+        raise ValueError("message is required")
 
-    try:
-        log_conversation(user_id, "user", message)
-        response_text = generate_chat_response(user_id, message)
-        log_conversation(user_id, "assistant", response_text)
-        return jsonify({"response": response_text})
-    except RuntimeError as exc:
-        logger.exception("Model stack unavailable")
-        return jsonify({"error": str(exc)}), 503
-    except Exception as exc:
-        logger.exception("Chat request failed")
-        return jsonify({"error": "An unexpected error occurred.", "details": str(exc)}), 500
+    log_conversation(user_id, "user", message)
+    response_text = generate_chat_response(user_id, message)
+    log_conversation(user_id, "assistant", response_text)
+    return response_text
 
 
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "model_ready": is_model_ready()})
+def run_interactive_chat(user_id: str) -> None:
+    """Run an interactive terminal session."""
+
+    _print_header(user_id)
+    if not is_model_ready():
+        print("Warning: TensorFlow model is not ready. Memory and regex replies will still work.")
+
+    while True:
+        try:
+            message = input("You: ").strip()
+        except EOFError:
+            print()
+            break
+        except KeyboardInterrupt:
+            print("\nExiting.")
+            break
+
+        if not message:
+            continue
+
+        if message.lower() in {"quit", "exit"}:
+            print("Bye.")
+            break
+
+        try:
+            response_text = chat_once(user_id, message)
+            print(f"Bot: {response_text}")
+        except Exception as exc:
+            logger.exception("Chat request failed")
+            print(f"Error: {exc}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Smart Chatbot with Memory")
+    parser.add_argument("--user-id", default="terminal_user", help="Persistent user identifier for memory storage")
+    parser.add_argument("--message", help="Send one message and print the response, then exit")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    args = parse_args()
+    if args.message:
+        try:
+            print(chat_once(args.user_id, args.message))
+        except Exception as exc:
+            raise SystemExit(str(exc)) from exc
+    else:
+        run_interactive_chat(args.user_id)
