@@ -16,6 +16,13 @@ def normalize_name(name: str) -> str:
     return " ".join(part[:1].upper() + part[1:].lower() if part else part for part in cleaned.split(" "))
 
 
+def normalize_phrase(text: str) -> str:
+    """Normalize a short remembered phrase for display and storage."""
+
+    cleaned = re.sub(r"\s+", " ", text.strip().strip(".?!,;:"))
+    return cleaned.lower()
+
+
 def extract_name(message: str) -> Optional[str]:
     """Extract a name from common self-introduction phrases."""
 
@@ -37,6 +44,26 @@ def extract_name(message: str) -> Optional[str]:
     return None
 
 
+def extract_preference(message: str) -> Optional[str]:
+    """Extract a simple liked thing from messages like 'I like eating'."""
+
+    if not message:
+        return None
+
+    patterns = [
+        r"\bi like\s+(.+)$",
+        r"\bi love\s+(.+)$",
+        r"\bi enjoy\s+(.+)$",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.IGNORECASE)
+        if match:
+            value = normalize_phrase(match.group(1))
+            return value if value else None
+    return None
+
+
 def is_name_query(message: str) -> bool:
     """Detect whether the message asks for the stored name."""
 
@@ -51,6 +78,24 @@ def is_name_query(message: str) -> bool:
         "can you tell me my name",
         "who am i",
         "remember my name",
+    ]
+    return any(trigger in lowered for trigger in triggers)
+
+
+def is_preference_query(message: str) -> bool:
+    """Detect whether the message asks what the user likes."""
+
+    if not message:
+        return False
+
+    lowered = message.lower()
+    triggers = [
+        "what do i like",
+        "what do i love",
+        "what do i enjoy",
+        "what do i like?",
+        "what do i love?",
+        "what do i enjoy?",
     ]
     return any(trigger in lowered for trigger in triggers)
 
