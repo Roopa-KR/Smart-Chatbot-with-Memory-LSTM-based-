@@ -35,6 +35,45 @@ _LABEL_TO_INDEX: Dict[str, int] = {}
 _INDEX_TO_LABEL: Dict[int, str] = {}
 _MAX_SEQUENCE_LENGTH = 0
 
+_STOPWORDS = {
+    "a",
+    "about",
+    "an",
+    "and",
+    "are",
+    "be",
+    "can",
+    "do",
+    "for",
+    "from",
+    "have",
+    "how",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "please",
+    "tell",
+    "that",
+    "the",
+    "this",
+    "to",
+    "understand",
+    "we",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "would",
+    "you",
+}
+
 
 def _require_ml_stack() -> None:
     if _ML_IMPORT_ERROR is not None:
@@ -69,8 +108,8 @@ def _score_pattern_match(message_tokens: List[str], pattern_tokens: List[str]) -
     if not message_tokens or not pattern_tokens:
         return 0.0
 
-    message_token_set = set(message_tokens)
-    pattern_token_set = set(pattern_tokens)
+    message_token_set = {token for token in message_tokens if token not in _STOPWORDS}
+    pattern_token_set = {token for token in pattern_tokens if token not in _STOPWORDS}
     overlap = len(message_token_set & pattern_token_set)
     return overlap / max(len(pattern_token_set), 1)
 
@@ -83,6 +122,10 @@ def _heuristic_predict_intent(message: str) -> Tuple[str, float]:
     if not message_tokens:
         return "fallback", 0.0
 
+    filtered_message_tokens = [token for token in message_tokens if token not in _STOPWORDS]
+    if not filtered_message_tokens:
+        return "fallback", 0.0
+
     best_intent = "fallback"
     best_score = 0.0
 
@@ -93,7 +136,7 @@ def _heuristic_predict_intent(message: str) -> Tuple[str, float]:
 
         for pattern in intent.get("patterns", []):
             pattern_tokens = preprocess_text(pattern)
-            score = _score_pattern_match(message_tokens, pattern_tokens)
+            score = _score_pattern_match(filtered_message_tokens, pattern_tokens)
             if score > best_score:
                 best_score = score
                 best_intent = tag
