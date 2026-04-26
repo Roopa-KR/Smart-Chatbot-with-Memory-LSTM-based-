@@ -35,6 +35,48 @@ _LABEL_TO_INDEX: Dict[str, int] = {}
 _INDEX_TO_LABEL: Dict[int, str] = {}
 _MAX_SEQUENCE_LENGTH = 0
 
+_AUGMENTATION_TEMPLATES = {
+    "greeting": [
+        "hi",
+        "hello",
+        "hey",
+        "hey there",
+        "good day",
+        "good afternoon",
+        "howdy",
+    ],
+    "goodbye": [
+        "bye",
+        "goodbye",
+        "see you later",
+        "see ya",
+        "catch you later",
+        "talk soon",
+    ],
+    "name_store": [
+        "my name is {name}",
+        "i am {name}",
+        "i'm {name}",
+        "call me {name}",
+        "you can call me {name}",
+    ],
+    "name_query": [
+        "what is my name",
+        "what's my name",
+        "do you know my name",
+        "who am i",
+        "can you tell me my name",
+        "remember my name",
+    ],
+    "fallback": [
+        "tell me a joke",
+        "what is the weather today",
+        "sing a song",
+        "random unrelated text",
+        "asdkjhasd",
+    ],
+}
+
 _STOPWORDS = {
     "a",
     "about",
@@ -99,7 +141,36 @@ def _build_training_corpus(intents: dict) -> Tuple[List[str], List[str]]:
             if processed:
                 texts.append(processed)
                 labels.append(tag)
+        for augmented_pattern in _augment_patterns(tag, intent.get("patterns", [])):
+            processed = preprocess_as_string(augmented_pattern)
+            if processed:
+                texts.append(processed)
+                labels.append(tag)
     return texts, labels
+
+
+def _augment_patterns(tag: str, patterns: List[str]) -> List[str]:
+    """Create a few lightweight phrasing variants to improve intent generalization."""
+
+    augmented_patterns: List[str] = []
+    template_variants = _AUGMENTATION_TEMPLATES.get(tag, [])
+
+    if tag == "name_store":
+        names = ["alex", "maria", "nisha", "sam", "taylor"]
+        for name in names:
+            for template in template_variants:
+                augmented_patterns.append(template.format(name=name))
+    else:
+        augmented_patterns.extend(template_variants)
+
+    for pattern in patterns:
+        normalized_pattern = pattern.strip().lower()
+        if normalized_pattern.endswith("!"):
+            augmented_patterns.append(normalized_pattern[:-1])
+        if normalized_pattern.endswith("?"):
+            augmented_patterns.append(normalized_pattern[:-1])
+
+    return list(dict.fromkeys(augmented_patterns))
 
 
 def _score_pattern_match(message_tokens: List[str], pattern_tokens: List[str]) -> float:
@@ -158,8 +229,9 @@ def _create_model(vocab_size: int, max_sequence_length: int, num_classes: int) -
     model = Sequential(
         [
             Embedding(input_dim=vocab_size, output_dim=64, input_length=max_sequence_length),
-            LSTM(32),
+            LSTM(64, dropout=0.3, recurrent_dropout=0.2),
             Dense(32, activation="relu"),
+            Dense(16, activation="relu"),
             Dense(num_classes, activation="softmax"),
         ]
     )
@@ -191,12 +263,31 @@ def train_model(force_retrain: bool = False) -> Sequential:
     y, label_to_index, index_to_label = _encode_labels(labels)
     model = _create_model(len(tokenizer.word_index) + 1, max_sequence_length, len(label_to_index))
 
+    indices = np.arange(len(padded_sequences))
+    np.random.shuffle(indices)
+    split_index = max(1, int(len(indices) * 0.8))
+    train_indices = indices[:split_index]
+    validation_indices = indices[split_index:]
+
+    x_train = padded_sequences[train_indices]
+    y_train = y[train_indices]
+    x_validation = padded_sequences[validation_indices]
+    y_validation = y[validation_indices]
+
+    callbacks = []
+    if len(validation_indices) > 0:
+        from tensorflow.keras.callbacks import EarlyStopping
+
+        callbacks.append(EarlyStopping(monitor="val_loss", patience=20, restore_best_weights=True))
+
     model.fit(
-        padded_sequences,
-        y,
-        epochs=200,
+        x_train,
+        y_train,
+        validation_data=(x_validation, y_validation) if len(validation_indices) > 0 else None,
+        epochs=250,
         verbose=0,
         shuffle=True,
+        callbacks=callbacks,
     )
 
     model.save(MODEL_PATH)
