@@ -8,7 +8,7 @@ from typing import Optional
 
 from db import get_recent_messages, initialize_database, log_conversation, retrieve_memory, store_memory
 from model import get_random_response, is_model_ready, predict_intent
-from utils import extract_name, extract_preference, is_name_query, is_preference_query
+from utils import extract_name, extract_possession, extract_preference, is_name_query, is_possession_query, is_preference_query
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +32,11 @@ def generate_chat_response(user_id: str, message: str) -> str:
         store_memory(user_id, "likes", extracted_preference)
         return f"Got it. I'll remember that you like {extracted_preference}."
 
+    extracted_possession = extract_possession(message)
+    if extracted_possession:
+        store_memory(user_id, "has", extracted_possession)
+        return f"Got it. I'll remember that you have {extracted_possession}."
+
     if is_name_query(message):
         stored_name = retrieve_memory(user_id, "name")
         if stored_name:
@@ -43,6 +48,12 @@ def generate_chat_response(user_id: str, message: str) -> str:
         if stored_preference:
             return f"You like {stored_preference}."
         return "I do not know what you like yet. Tell me by saying 'I like ...'."
+
+    if is_possession_query(message):
+        stored_possession = retrieve_memory(user_id, "has")
+        if stored_possession:
+            return f"You have {stored_possession}."
+        return "I do not know what you have yet. Tell me by saying 'I have ...'."
 
     intent, confidence = predict_intent(message, threshold=0.7)
     logger.info("Predicted intent for %s: %s (%.3f)", user_id, intent, confidence)
