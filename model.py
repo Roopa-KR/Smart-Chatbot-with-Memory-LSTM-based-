@@ -236,11 +236,14 @@ def load_trained_artifacts() -> Sequential:
     if not MODEL_PATH.exists() or not TOKENIZER_PATH.exists() or not METADATA_PATH.exists():
         return train_model(force_retrain=True)
 
-    _MODEL = load_model(MODEL_PATH)
-    with open(TOKENIZER_PATH, "rb") as file_handle:
-        _TOKENIZER = pickle.load(file_handle)
-    with open(METADATA_PATH, "r", encoding="utf-8") as file_handle:
-        metadata = json.load(file_handle)
+    try:
+        _MODEL = load_model(MODEL_PATH)
+        with open(TOKENIZER_PATH, "rb") as file_handle:
+            _TOKENIZER = pickle.load(file_handle)
+        with open(METADATA_PATH, "r", encoding="utf-8") as file_handle:
+            metadata = json.load(file_handle)
+    except Exception:
+        return train_model(force_retrain=True)
 
     _LABELS = metadata["labels"]
     _LABEL_TO_INDEX = {label: int(index) for label, index in metadata["label_to_index"].items()}
