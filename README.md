@@ -1,10 +1,10 @@
 # Smart Chatbot with Memory
 
-Backend for a simple memory-aware chatbot built with Flask, TensorFlow/Keras, SQLite, and NLTK.
+Terminal-based memory-aware chatbot built with TensorFlow/Keras, SQLite, and NLTK.
 
 ## Files
 
-- `app.py` - Flask API with `POST /chat`
+- `app.py` - terminal chatbot entrypoint
 - `model.py` - LSTM training and prediction logic
 - `nlp_utils.py` - text preprocessing helpers
 - `db.py` - SQLite memory and conversation logging
@@ -14,57 +14,71 @@ Backend for a simple memory-aware chatbot built with Flask, TensorFlow/Keras, SQ
 
 ## Setup
 
-1. Create and activate a Python environment that supports TensorFlow.
-2. Install dependencies:
+1. Create and activate a Python environment.
+2. Install the runtime dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Train the model artifacts if needed:
+3. If you want to train or use the LSTM intent model, install TensorFlow in the Python 3.10 `.venv` environment:
+
+   ```bash
+   pip install -r requirements-ml.txt
+   ```
+
+4. Train the model artifacts if needed:
 
    ```bash
    python train_model.py
    ```
 
-4. Start the API:
+5. Start the chatbot in the terminal:
 
    ```bash
    python app.py
    ```
 
-## Example Requests
+## Example Usage
 
-### Store a name
-
-```bash
-curl -X POST http://127.0.0.1:5000/chat ^
-  -H "Content-Type: application/json" ^
-  -d "{\"user_id\":\"123\",\"message\":\"My name is Nisha\"}"
-```
-
-Expected response:
-
-```json
-{ "response": "Nice to meet you, Nisha!" }
-```
-
-### Query a name
+### Interactive mode
 
 ```bash
-curl -X POST http://127.0.0.1:5000/chat ^
-  -H "Content-Type: application/json" ^
-  -d "{\"user_id\":\"123\",\"message\":\"What is my name?\"}"
+python app.py --user-id 123
 ```
 
-Expected response:
+Then type:
 
 ```json
-{ "response": "Your name is Nisha." }
+My name is Nisha
+```
+
+Expected reply:
+
+```text
+Bot: Nice to meet you, Nisha!
+```
+
+Then ask:
+
+```text
+What is my name?
+```
+
+Expected reply:
+
+```text
+Bot: Your name is Nisha.
+```
+
+### One-shot mode
+
+```bash
+python app.py --user-id 123 --message "Hi"
 ```
 
 ## Notes
 
 - The API uses SQLite and creates the database automatically.
 - Saved artifacts include `chatbot_lstm_model.keras`, `tokenizer.pkl`, and `model_metadata.json`.
-- The health endpoint returns whether the ML stack is ready: `GET /health`.
+- Use Python 3.10 in `.venv` for the ML-backed model path.
