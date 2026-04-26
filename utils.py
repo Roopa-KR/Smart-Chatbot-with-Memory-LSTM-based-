@@ -120,9 +120,15 @@ def is_preference_query(message: str) -> bool:
         "what do i like",
         "what do i love",
         "what do i enjoy",
+        "what i like",
+        "what i love",
+        "what i enjoy",
         "what do i like?",
         "what do i love?",
         "what do i enjoy?",
+        "what i like?",
+        "what i love?",
+        "what i enjoy?",
     ]
     return any(trigger in lowered for trigger in triggers)
 
@@ -140,6 +146,9 @@ def is_possession_query(message: str) -> bool:
         "do i have",
         "what have i got",
         "what accounts do i have",
+        "what i have",
+        "what i own",
+        "what account i have",
     ]
     return any(trigger in lowered for trigger in triggers)
 
