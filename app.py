@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import Optional
 
 from db import get_recent_messages, initialize_database, log_conversation, retrieve_memory, store_memory
-from model import get_random_response, is_model_ready, predict_intent
+from model import generate_response, is_model_ready
 from utils import extract_name, extract_possession, extract_preference, is_name_query, is_possession_query, is_preference_query
 
 logging.basicConfig(level=logging.INFO)
@@ -17,9 +16,9 @@ initialize_database()
 
 
 def generate_chat_response(user_id: str, message: str) -> str:
-    """Generate a response using memory first, then the intent model."""
+    """Generate a response using memory first, then Seq2Seq generation."""
 
-    recent_messages = get_recent_messages(user_id, limit=2)
+    recent_messages = get_recent_messages(user_id, limit=8)
     logger.info("Recent context for %s: %s", user_id, recent_messages)
 
     extracted_name = extract_name(message)
@@ -55,13 +54,9 @@ def generate_chat_response(user_id: str, message: str) -> str:
             return f"You have {stored_possession}."
         return "I do not know what you have yet. Tell me by saying 'I have ...'."
 
-    intent, confidence = predict_intent(message, threshold=0.7)
-    logger.info("Predicted intent for %s: %s (%.3f)", user_id, intent, confidence)
-
-    if intent == "fallback":
-        return get_random_response("fallback")
-
-    return get_random_response(intent)
+    generated_response = generate_response(message, history=recent_messages)
+    logger.info("Generated response for %s: %s", user_id, generated_response)
+    return generated_response
 
 
 def _print_header(user_id: str) -> None:
@@ -89,7 +84,7 @@ def run_interactive_chat(user_id: str) -> None:
 
     _print_header(user_id)
     if not is_model_ready():
-        print("Warning: TensorFlow model is not ready. Using heuristic intent fallback in terminal mode.")
+        print("Warning: Seq2Seq model is not ready. Using heuristic fallback responses in terminal mode.")
 
     while True:
         try:
