@@ -27,7 +27,17 @@ DECODER_MODEL_PATH = os.path.join(MODEL_DIR, "decoder_model.keras")
 TOKENIZER_PATH = os.path.join(MODEL_DIR, "tokenizer.pkl")
 METADATA_PATH = os.path.join(MODEL_DIR, "metadata.json")
 
-MYSQL_URL = os.getenv("MYSQL_URL")
+MYSQL_URL = os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/chatbot_db")
+
+# Check if models exist
+if not os.path.exists(ENCODER_MODEL_PATH) or not os.path.exists(DECODER_MODEL_PATH):
+    st.error("⚠️ Models not found! Please run `python train.py` first.")
+    st.info("Setup steps:\n1. Set MYSQL_URL env var\n2. Run: python train.py\n3. Then reload this app")
+    st.stop()
+
+if not MYSQL_URL or MYSQL_URL == "mysql+pymysql://root:password@localhost:3306/chatbot_db":
+    st.warning("⚠️ MYSQL_URL not configured. Set the environment variable or update the default.")
+    st.info("Example: $env:MYSQL_URL='mysql+pymysql://root:yourpass@localhost:3306/chatbot_db'")
 
 
 # ---------- FIX FOR STREAMLIT RERUN ----------
