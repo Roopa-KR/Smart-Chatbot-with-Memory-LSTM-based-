@@ -1,6 +1,7 @@
 tensorflow==2.10.1
-numpy<2
+numpy==1.23.5
 streamlit==1.18.1
+altair==4.2.2
 protobuf==3.19.6
 pandas
 sqlalchemy
