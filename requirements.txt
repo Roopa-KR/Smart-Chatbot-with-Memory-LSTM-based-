@@ -1,0 +1,8 @@
+tensorflow==2.10.1
+numpy<2
+streamlit==1.18.1
+protobuf==3.19.6
+pandas
+sqlalchemy
+pymysql
+python-dotenv
