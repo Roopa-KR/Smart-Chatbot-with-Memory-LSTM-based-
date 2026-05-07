@@ -27,6 +27,13 @@ load_dotenv()
 st.set_page_config(page_title="E-commerce Chatbot", page_icon="🛍️")
 st.title("🛍️ E-commerce Support Chatbot")
 
+try:
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    SESSION_STATE = st.session_state if get_script_run_ctx() else {}
+except Exception:
+    SESSION_STATE = {}
+
 MODEL_DIR = "models"
 ENCODER_MODEL_PATH = os.path.join(MODEL_DIR, "encoder_model.keras")
 DECODER_MODEL_PATH = os.path.join(MODEL_DIR, "decoder_model.keras")
@@ -69,21 +76,21 @@ def load_models():
 
 
 # ---------- SESSION ----------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "messages" not in SESSION_STATE:
+    SESSION_STATE["messages"] = []
 
-if "context" not in st.session_state:
-    st.session_state.context = []
+if "context" not in SESSION_STATE:
+    SESSION_STATE["context"] = []
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+if "user" not in SESSION_STATE:
+    SESSION_STATE["user"] = None
 
-if "order_id" not in st.session_state:
-    st.session_state.order_id = None
+if "order_id" not in SESSION_STATE:
+    SESSION_STATE["order_id"] = None
 
 
 # ---------- LOGIN ----------
-if not st.session_state.user:
+if not SESSION_STATE.get("user"):
     st.subheader("Login")
 
     email = st.text_input("Enter Email")
@@ -92,7 +99,7 @@ if not st.session_state.user:
         user = get_user_by_email(MYSQL_URL, email)
 
         if user:
-            st.session_state.user = user
+            SESSION_STATE["user"] = user
             st.success(f"Welcome {user['name']}")
             rerun()
         else:
@@ -102,7 +109,7 @@ if not st.session_state.user:
 
 
 # ---------- DISPLAY CHAT ----------
-for msg in st.session_state.messages:
+for msg in SESSION_STATE["messages"]:
     st.write(f"**{msg['role']}**: {msg['content']}")
 
 
@@ -111,12 +118,12 @@ user_input = st.text_input("Ask something...")
 
 if st.button("Send") and user_input:
 
-    st.session_state.messages.append({"role": "You", "content": user_input})
+    SESSION_STATE["messages"].append({"role": "You", "content": user_input})
 
     # extract order id
     order_id = extract_order_id(user_input)
     if order_id:
-        st.session_state.order_id = order_id
+        SESSION_STATE["order_id"] = order_id
 
     # intent
     intent = classify_intent(user_input)
@@ -125,7 +132,7 @@ if st.button("Send") and user_input:
     result = handle_intent(
         intent,
         user_input,
-        st.session_state,
+        SESSION_STATE,
         MYSQL_URL
     )
 
@@ -133,7 +140,7 @@ if st.button("Send") and user_input:
     encoder, decoder, tokenizer, metadata = load_models()
 
     context_input = build_context_input(
-        st.session_state.context,
+        SESSION_STATE["context"],
         user_input
     )
 
@@ -161,21 +168,21 @@ if st.button("Send") and user_input:
     if not bot_response:
         bot_response = keyword_intent_fallback(
             user_input,
-            st.session_state.order_id
+            SESSION_STATE["order_id"]
         )
 
     # save context
-    st.session_state.context.append(user_input)
-    st.session_state.context = st.session_state.context[-3:]
+    SESSION_STATE["context"].append(user_input)
+    SESSION_STATE["context"] = SESSION_STATE["context"][-3:]
 
-    st.session_state.messages.append({"role": "Bot", "content": bot_response})
+    SESSION_STATE["messages"].append({"role": "Bot", "content": bot_response})
 
     # save logs
     append_chat_log_mysql(
         MYSQL_URL,
         user_input,
         bot_response,
-        user_id=st.session_state.user["user_id"],
+        user_id=SESSION_STATE["user"]["user_id"],
         intent=intent,
         action_taken=action,
     )
@@ -184,15 +191,16 @@ if st.button("Send") and user_input:
 
 
 # ---------- SIDEBAR ----------
-with st.sidebar:
-    st.write("User:", st.session_state.user["name"])
+if SESSION_STATE.get("user"):
+    with st.sidebar:
+        st.write("User:", SESSION_STATE["user"]["name"])
 
-    orders = get_orders_by_user(
-        MYSQL_URL,
-        st.session_state.user["user_id"]
-    )
+        orders = get_orders_by_user(
+            MYSQL_URL,
+            SESSION_STATE["user"]["user_id"]
+        )
 
-    st.subheader("Orders")
+        st.subheader("Orders")
 
-    for o in orders:
-        st.write(f"{o['order_id']} - {o['product_name']} ({o['status']})")
+        for o in orders:
+            st.write(f"{o['order_id']} - {o['product_name']} ({o['status']})")
