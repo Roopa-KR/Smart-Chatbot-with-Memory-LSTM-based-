@@ -1,6 +1,12 @@
 import os
 import pickle
 from dotenv import load_dotenv
+
+# Force CPU-only execution
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+
 import streamlit as st
 from tensorflow.keras.models import load_model
 
