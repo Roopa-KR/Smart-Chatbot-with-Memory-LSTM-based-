@@ -11,6 +11,7 @@ tf.config.set_visible_devices([], 'GPU')
 
 import numpy as np
 from sqlalchemy import create_engine, text
+from werkzeug.security import check_password_hash, generate_password_hash
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from preprocess import clean_text, START_TOKEN, END_TOKEN
@@ -19,6 +20,39 @@ from preprocess import clean_text, START_TOKEN, END_TOKEN
 # ---------------- DB ----------------
 def get_engine(mysql_url):
     return create_engine(mysql_url)
+
+
+def ensure_auth_schema(mysql_url):
+    engine = get_engine(mysql_url)
+
+    with engine.begin() as conn:
+        column_exists = conn.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'users'
+                  AND column_name = 'password_hash'
+                """
+            )
+        ).scalar_one()
+
+        if not column_exists:
+            conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL"))
+        conn.execute(
+            text(
+                """
+                UPDATE users
+                SET password_hash = :password_hash
+                WHERE email = 'john@example.com'
+                  AND (password_hash IS NULL OR password_hash = '')
+                """
+            ),
+            {
+                "password_hash": "scrypt:32768:8:1$cs8FbU8CheTomdO3$e898913b0bd39d0a110ee6298fa30db05454017f6b5dd642af375b0bb231f6671df4c718c05cb69fab7e22a50864c6e93f53d4e0172573bb5d48e92ec785482a"
+            },
+        )
 
 
 # ---------------- METADATA ----------------
@@ -53,11 +87,14 @@ def extract_order_id(text):
 
 # ---------------- USERS ----------------
 def get_user_by_email(mysql_url, email):
+    ensure_auth_schema(mysql_url)
     engine = get_engine(mysql_url)
 
     with engine.connect() as conn:
         result = conn.execute(
-            text("SELECT user_id, name, email FROM users WHERE email=:email"),
+            text(
+                "SELECT user_id, name, email, password_hash FROM users WHERE email=:email"
+            ),
             {"email": email},
         ).fetchone()
 
@@ -66,7 +103,40 @@ def get_user_by_email(mysql_url, email):
             "user_id": result[0],
             "name": result[1],
             "email": result[2],
+            "password_hash": result[3],
         }
+
+    return None
+
+
+def create_user(mysql_url, name, email, password):
+    ensure_auth_schema(mysql_url)
+    engine = get_engine(mysql_url)
+    password_hash = generate_password_hash(password)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (name, email, password_hash)
+                VALUES (:name, :email, :password_hash)
+                """
+            ),
+            {"name": name, "email": email, "password_hash": password_hash},
+        )
+
+    return get_user_by_email(mysql_url, email)
+
+
+def authenticate_user(mysql_url, email, password):
+    ensure_auth_schema(mysql_url)
+    user = get_user_by_email(mysql_url, email)
+
+    if not user or not user.get("password_hash"):
+        return None
+
+    if check_password_hash(user["password_hash"], password):
+        return user
 
     return None
 
